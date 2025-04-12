@@ -3,64 +3,92 @@ import { useNavigate } from 'react-router-dom';
 import { 
   ArrowRight, ArrowLeft, Rocket, Building2, 
   Globe as GlobeIcon, Users, Briefcase, Award as AwardIcon, 
-  Linkedin as LinkedinIcon 
+  Linkedin as LinkedinIcon, AlertCircle 
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { supabase } from '../lib/supabase';
 
 interface StartupFormData {
   name: string;
   website: string;
   domain: string;
   summary: string;
-  logo: string;
-  founderName: string;
-  founderEmail: string;
-  founderLinkedIn: string;
-  founderBITSCampus: 'goa' | 'hyderabad' | 'pilani' | '';
-  phoneNumber: string;
-  companyLinkedIn: string;
-  fundingStage: string;
-  teamSize: string;
+  logo_url: string;
+  founder_name: string;
+  founder_email: string;
+  founder_linkedin: string;
+  founder_bits_campus: 'goa' | 'hyderabad' | 'pilani' | '';
+  phone_number: string;
+  company_linkedin: string;
+  funding_stage: string;
+  team_size: string;
 }
 
 const StartupRegistrationPage: React.FC = () => {
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const { user, refreshProfile } = useAuth();
   const [currentStep, setCurrentStep] = useState<number>(0);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string>('');
   const [formData, setFormData] = useState<StartupFormData>({
     name: '',
     website: '',
     domain: '',
     summary: '',
-    logo: '',
-    founderName: '',
-    founderEmail: user?.email || '',
-    founderLinkedIn: '',
-    founderBITSCampus: '',
-    phoneNumber: '',
-    companyLinkedIn: '',
-    fundingStage: '',
-    teamSize: '',
+    logo_url: '',
+    founder_name: '',
+    founder_email: user?.email || '',
+    founder_linkedin: '',
+    founder_bits_campus: '',
+    phone_number: '',
+    company_linkedin: '',
+    funding_stage: '',
+    team_size: '',
   });
 
   useEffect(() => {
+    if (!user) {
+      navigate('/auth');
+      return;
+    }
+    
+    // Check if user already has a startup
+    const checkStartup = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('startups')
+          .select('id')
+          .eq('owner_id', user.id)
+          .single();
+          
+        if (data) {
+          // User already has a startup, redirect to dashboard
+          navigate('/startup-dashboard');
+        }
+      } catch (error) {
+        // No startup found, continue with registration
+      }
+    };
+    
+    checkStartup();
+    
     if (user?.email) {
       setFormData(prev => ({
         ...prev,
-        founderEmail: user.email || ''
+        founder_email: user.email || ''
       }));
       
       // Extract BITS campus from email if possible
       const email = user.email.toLowerCase();
       if (email.includes('@goa.bits-pilani.ac.in')) {
-        setFormData(prev => ({ ...prev, founderBITSCampus: 'goa' }));
+        setFormData(prev => ({ ...prev, founder_bits_campus: 'goa' }));
       } else if (email.includes('@hyderabad.bits-pilani.ac.in') || email.includes('@hyd.bits-pilani.ac.in')) {
-        setFormData(prev => ({ ...prev, founderBITSCampus: 'hyderabad' }));
+        setFormData(prev => ({ ...prev, founder_bits_campus: 'hyderabad' }));
       } else if (email.includes('@pilani.bits-pilani.ac.in')) {
-        setFormData(prev => ({ ...prev, founderBITSCampus: 'pilani' }));
+        setFormData(prev => ({ ...prev, founder_bits_campus: 'pilani' }));
       }
     }
-  }, [user]);
+  }, [user, navigate]);
 
   // Define form steps
   const formSteps = [
@@ -72,12 +100,12 @@ const StartupRegistrationPage: React.FC = () => {
     {
       title: "Company Details",
       icon: <Briefcase className="h-6 w-6" />,
-      fields: ["summary", "logo", "companyLinkedIn", "fundingStage", "teamSize"]
+      fields: ["summary", "logo_url", "company_linkedin", "funding_stage", "team_size"]
     },
     {
       title: "Founder Information",
       icon: <Users className="h-6 w-6" />,
-      fields: ["founderName", "founderEmail", "founderLinkedIn", "founderBITSCampus", "phoneNumber"]
+      fields: ["founder_name", "founder_email", "founder_linkedin", "founder_bits_campus", "phone_number"]
     }
   ];
 
@@ -91,8 +119,8 @@ const StartupRegistrationPage: React.FC = () => {
   const isStepComplete = (stepIndex: number): boolean => {
     const requiredFields = formSteps[stepIndex].fields.filter(field => {
       // Fields that are required
-      if (field === 'founderBITSCampus' || field === 'phoneNumber' || field === 'logo' || 
-          field === 'companyLinkedIn' || field === 'fundingStage' || field === 'teamSize') {
+      if (field === 'founder_bits_campus' || field === 'phone_number' || field === 'logo_url' || 
+          field === 'company_linkedin' || field === 'funding_stage' || field === 'team_size') {
         return false; // These fields are optional
       }
       return true;
@@ -115,19 +143,61 @@ const StartupRegistrationPage: React.FC = () => {
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    // In a real application, this would be an API call
-    const existingStartups = JSON.parse(localStorage.getItem('registeredStartups') || '[]');
-    const newStartup = {
-      ...formData,
-      id: Date.now(),
-      category: formData.domain,
-      description: formData.summary,
-      image: formData.logo || 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?auto=format&fit=crop&w=800',
-    };
-    localStorage.setItem('registeredStartups', JSON.stringify([...existingStartups, newStartup]));
-    navigate('/startup-dashboard');
+    setError('');
+    setIsSubmitting(true);
+    
+    // Set a timeout to handle long processing time
+    const timeoutId = setTimeout(() => {
+      if (isSubmitting) {
+        setError('Registration is taking longer than expected. Please try again.');
+        setIsSubmitting(false);
+      }
+    }, 10000);
+    
+    try {
+      if (!user) {
+        throw new Error('You must be logged in to register a startup');
+      }
+      
+      // Insert startup into Supabase
+      const { data, error: supabaseError } = await supabase
+        .from('startups')
+        .insert({
+          owner_id: user.id,
+          name: formData.name,
+          website: formData.website,
+          domain: formData.domain,
+          summary: formData.summary,
+          logo_url: formData.logo_url || 'https://images.unsplash.com/photo-1559136555-9303baea8ebd?auto=format&fit=crop&w=800',
+          founder_name: formData.founder_name,
+          founder_email: formData.founder_email,
+          founder_linkedin: formData.founder_linkedin,
+          founder_bits_campus: formData.founder_bits_campus,
+          phone_number: formData.phone_number,
+          company_linkedin: formData.company_linkedin,
+          funding_stage: formData.funding_stage,
+          team_size: formData.team_size
+        })
+        .select();
+      
+      clearTimeout(timeoutId);
+      
+      if (supabaseError) throw supabaseError;
+      
+      // Show success message
+      alert("Startup registered successfully!");
+      
+      // Navigate to dashboard (refreshProfile will happen in dashboard)
+      navigate('/startup-dashboard');
+    } catch (error: any) {
+      clearTimeout(timeoutId);
+      console.error('Error registering startup:', error);
+      setError(error.message || 'An error occurred while registering your startup');
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   // Render the progress bar
@@ -179,6 +249,13 @@ const StartupRegistrationPage: React.FC = () => {
           <span className="ml-2">{step.title}</span>
         </h2>
         
+        {error && (
+          <div className="bg-red-900/50 text-red-200 p-4 rounded-lg text-sm font-medium flex items-start gap-2">
+            <AlertCircle className="h-5 w-5 flex-shrink-0 mt-0.5" />
+            <span>{error}</span>
+          </div>
+        )}
+        
         {step.fields.map(field => renderField(field as keyof StartupFormData))}
       </div>
     );
@@ -201,15 +278,15 @@ const StartupRegistrationPage: React.FC = () => {
       website: { label: "Website URL", placeholder: "e.g., https://techflow.ai", required: true, type: "url" },
       domain: { label: "Industry/Category", placeholder: "Select industry", required: true },
       summary: { label: "Startup Summary", placeholder: "Tell us about your startup mission and vision...", required: true },
-      logo: { label: "Logo URL", placeholder: "e.g., https://example.com/logo.png", required: false, type: "url" },
-      founderName: { label: "Founder Name", placeholder: "e.g., Rahul Sharma", required: true },
-      founderEmail: { label: "Founder BITS Email", placeholder: "e.g., f20230123@goa.bits-pilani.ac.in", required: true, type: "email" },
-      founderLinkedIn: { label: "Founder LinkedIn", placeholder: "e.g., https://linkedin.com/in/founder", required: true, type: "url" },
-      founderBITSCampus: { label: "BITS Campus", placeholder: "Select campus", required: false },
-      phoneNumber: { label: "Contact Number", placeholder: "e.g., +91 9876543210", required: false, type: "tel" },
-      companyLinkedIn: { label: "Company LinkedIn", placeholder: "e.g., https://linkedin.com/company/techflow", required: false, type: "url" },
-      fundingStage: { label: "Funding Stage", placeholder: "Select funding stage", required: false },
-      teamSize: { label: "Team Size", placeholder: "Select team size", required: false }
+      logo_url: { label: "Logo URL", placeholder: "e.g., https://example.com/logo.png", required: false, type: "url" },
+      founder_name: { label: "Founder Name", placeholder: "e.g., Rahul Sharma", required: true },
+      founder_email: { label: "Founder BITS Email", placeholder: "e.g., f20230123@goa.bits-pilani.ac.in", required: true, type: "email" },
+      founder_linkedin: { label: "Founder LinkedIn", placeholder: "e.g., https://linkedin.com/in/founder", required: true, type: "url" },
+      founder_bits_campus: { label: "BITS Campus", placeholder: "Select campus", required: false },
+      phone_number: { label: "Contact Number", placeholder: "e.g., +91 9876543210", required: false, type: "tel" },
+      company_linkedin: { label: "Company LinkedIn", placeholder: "e.g., https://linkedin.com/company/techflow", required: false, type: "url" },
+      funding_stage: { label: "Funding Stage", placeholder: "Select funding stage", required: false },
+      team_size: { label: "Team Size", placeholder: "Select team size", required: false }
     };
     
     const config = fieldConfig[fieldName];
@@ -257,7 +334,7 @@ const StartupRegistrationPage: React.FC = () => {
           </div>
         );
       
-      case 'founderBITSCampus':
+      case 'founder_bits_campus':
         return (
           <div key={fieldName} className="space-y-2">
             <label htmlFor={fieldName} className="block text-base font-medium text-gray-300">
@@ -275,7 +352,7 @@ const StartupRegistrationPage: React.FC = () => {
           </div>
         );
       
-      case 'fundingStage':
+      case 'funding_stage':
         return (
           <div key={fieldName} className="space-y-2">
             <label htmlFor={fieldName} className="block text-base font-medium text-gray-300">
@@ -296,7 +373,7 @@ const StartupRegistrationPage: React.FC = () => {
           </div>
         );
       
-      case 'teamSize':
+      case 'team_size':
         return (
           <div key={fieldName} className="space-y-2">
             <label htmlFor={fieldName} className="block text-base font-medium text-gray-300">
@@ -328,7 +405,7 @@ const StartupRegistrationPage: React.FC = () => {
               placeholder={config.placeholder}
               required={config.required}
             />
-            {fieldName === 'founderEmail' && (
+            {fieldName === 'founder_email' && (
               <p className="text-sm text-gray-400 mt-1">
                 Must be a valid BITS Pilani email (e.g., f20230233@goa.bits-pilani.ac.in)
               </p>
@@ -361,10 +438,22 @@ const StartupRegistrationPage: React.FC = () => {
           <button
             type="submit"
             className="flex items-center px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled={!isStepComplete(currentStep)}
+            disabled={!isStepComplete(currentStep) || isSubmitting}
           >
-            Register Startup
-            <Rocket className="ml-2 h-5 w-5" />
+            {isSubmitting ? (
+              <>
+                <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Processing...
+              </>
+            ) : (
+              <>
+                Register Startup
+                <Rocket className="ml-2 h-5 w-5" />
+              </>
+            )}
           </button>
         ) : (
           <button

@@ -5,18 +5,33 @@ import { useAuth } from '../contexts/AuthContext';
 
 const AuthPage = () => {
   const navigate = useNavigate();
-  const { signIn, signUp, isLoading } = useAuth();
+  const { signIn, signUp, isLoading: authLoading, user, userType } = useAuth();
   const [isSignUp, setIsSignUp] = useState(false);
-  const [userType, setUserType] = useState<'startup' | 'student'>('student');
+  const [accountType, setAccountType] = useState<'startup' | 'student'>('student');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   
+  // Redirect if already logged in
+  useEffect(() => {
+    if (user) {
+      // If already logged in, redirect to appropriate page
+      if (userType === 'startup') {
+        navigate('/startup-dashboard');
+      } else if (userType === 'student') {
+        navigate('/internships');
+      } else {
+        // If user type not determined yet, wait for it
+        // This is to handle the case when auth state is still loading
+      }
+    }
+  }, [user, userType, navigate]);
+
   // Email validation for BITS domains
   const validateBITSEmail = (email: string): boolean => {
-    if (userType === 'startup') {
+    if (accountType === 'startup') {
       const bitsEmailPattern = /@(goa|hyderabad|hyd|pilani)\.bits-pilani\.ac\.in$/i;
       return bitsEmailPattern.test(email);
     }
@@ -48,7 +63,7 @@ const AuthPage = () => {
     setError('');
     
     // For signup with startup account type, validate BITS email
-    if (isSignUp && userType === 'startup' && !validateBITSEmail(email)) {
+    if (isSignUp && accountType === 'startup' && !validateBITSEmail(email)) {
       setError('Startup founders must use a valid BITS Pilani email (e.g., f20230233@goa.bits-pilani.ac.in)');
       return;
     }
@@ -57,24 +72,68 @@ const AuthPage = () => {
     if (!validatePassword()) return;
 
     setIsSubmitting(true);
-
+    
     try {
+      // Set a timeout to show error if it takes too long
+      const timeoutId = setTimeout(() => {
+        if (isSubmitting) {
+          setError('The request is taking longer than expected. Please try again.');
+          setIsSubmitting(false);
+        }
+      }, 8000);
+
       if (isSignUp) {
-        const result = await signUp(email, password, userType);
+        const result = await signUp(email, password, accountType);
+        
+        clearTimeout(timeoutId);
+        
         if (result.error) {
           setError(result.error);
           setIsSubmitting(false);
           return;
         }
+        
+        // For signup, auto login instead of showing a message
+        const loginResult = await signIn(email, password);
+        
+        if (loginResult.error) {
+          setError(loginResult.error);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // The auth state change will handle navigation
       } else {
-        await signIn(email, password, userType);
+        // For sign in
+        const result = await signIn(email, password);
+        
+        clearTimeout(timeoutId);
+        
+        if (result.error) {
+          setError(result.error);
+          setIsSubmitting(false);
+          return;
+        }
+        
+        // Auth state change will navigate automatically
       }
-      navigate(userType === 'startup' ? '/startup-dashboard' : '/internships');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'An error occurred');
       setIsSubmitting(false);
     }
   };
+
+  // If still checking auth state, show loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <Rocket className="mx-auto h-12 w-12 text-indigo-500 animate-bounce" />
+          <p className="mt-4 text-lg text-gray-300">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12">
@@ -100,11 +159,11 @@ const AuthPage = () => {
             <button
               type="button"
               onClick={() => {
-                setUserType('student');
+                setAccountType('student');
                 setError('');
               }}
               className={`w-1/2 py-2.5 rounded-md text-sm font-medium flex justify-center items-center transition-all duration-200 ${
-                userType === 'student'
+                accountType === 'student'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'bg-transparent text-gray-300 hover:text-white'
               }`}
@@ -115,11 +174,11 @@ const AuthPage = () => {
             <button
               type="button"
               onClick={() => {
-                setUserType('startup');
+                setAccountType('startup');
                 setError('');
               }}
               className={`w-1/2 py-2.5 rounded-md text-sm font-medium flex justify-center items-center transition-all duration-200 ${
-                userType === 'startup'
+                accountType === 'startup'
                   ? 'bg-indigo-600 text-white shadow-md'
                   : 'bg-transparent text-gray-300 hover:text-white'
               }`}
@@ -147,10 +206,10 @@ const AuthPage = () => {
                   value={email}
                   onChange={handleEmailChange}
                   className="block w-full pl-10 pr-3 py-3 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 focus:border-indigo-500 focus:z-10"
-                  placeholder={userType === 'startup' ? "f20230233@goa.bits-pilani.ac.in" : "Email address"}
+                  placeholder={accountType === 'startup' ? "f20230233@goa.bits-pilani.ac.in" : "Email address"}
                 />
               </div>
-              {userType === 'startup' && isSignUp && (
+              {accountType === 'startup' && isSignUp && (
                 <p className="mt-1 text-xs text-indigo-400">
                   Must be a valid BITS Pilani email address
                 </p>
