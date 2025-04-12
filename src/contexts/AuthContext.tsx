@@ -6,8 +6,9 @@ interface AuthContextType {
   user: User | null;
   userType: 'startup' | 'student' | null;
   signIn: (email: string, password: string, type: 'startup' | 'student') => Promise<void>;
-  signUp: (email: string, password: string, type: 'startup' | 'student') => Promise<void>;
+  signUp: (email: string, password: string, type: 'startup' | 'student') => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
+  isLoading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [userType, setUserType] = useState<'startup' | 'student' | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
 
   useEffect(() => {
     // Check active sessions and sets the user
@@ -24,6 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Get user type from metadata or profile
         getUserType(session.user.id);
       }
+      setIsLoading(false);
     });
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
@@ -33,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else {
         setUserType(null);
       }
+      setIsLoading(false);
     });
 
     return () => subscription.unsubscribe();
@@ -48,13 +52,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setUserType(data?.user_type || null);
   };
 
+  const validateBITSEmail = (email: string, type: 'startup' | 'student'): boolean => {
+    if (type === 'startup') {
+      // BITS email domains
+      const bitsEmailPattern = /@(goa|hyd|pilani)\.bits-pilani\.ac\.in$/i;
+      return bitsEmailPattern.test(email);
+    }
+    return true; // No validation for students
+  };
+
   const signUp = async (email: string, password: string, type: 'startup' | 'student') => {
+    // For startups, validate BITS email
+    if (type === 'startup' && !validateBITSEmail(email, type)) {
+      return { 
+        error: "At least one founder must have a BITS Pilani email (e.g., f20230233@goa.bits-pilani.ac.in)" 
+      };
+    }
+
     const { data: { user }, error } = await supabase.auth.signUp({
       email,
       password,
     });
 
-    if (error) throw error;
+    if (error) return { error: error.message };
 
     if (user) {
       // Create profile with user type
@@ -64,6 +84,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         email: email,
       });
     }
+    
+    return {};
   };
 
   const signIn = async (email: string, password: string, type: 'startup' | 'student') => {
@@ -81,7 +103,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   return (
-    <AuthContext.Provider value={{ user, userType, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, userType, signIn, signUp, signOut, isLoading }}>
       {children}
     </AuthContext.Provider>
   );
