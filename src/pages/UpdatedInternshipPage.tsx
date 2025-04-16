@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { MapPin, Clock, DollarSign, Briefcase, Search, Filter, X, Tag, Loader } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+import ApplicationModal from '../components/ApplicationModal';
 
 interface Internship {
   id: string;
@@ -57,6 +58,14 @@ const InternshipPage: React.FC = () => {
   const [showFilters, setShowFilters] = useState<boolean>(false);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string>('');
+  
+  // Application modal state
+  const [showApplicationModal, setShowApplicationModal] = useState<boolean>(false);
+  const [selectedPosition, setSelectedPosition] = useState<{
+    id: string;
+    title: string;
+    companyName: string;
+  } | null>(null);
 
   // Fetch internships from Supabase
   useEffect(() => {
@@ -100,44 +109,26 @@ const InternshipPage: React.FC = () => {
   };
 
   // Apply for an internship
-  const handleApply = async (internshipId: string) => {
+  const handleApply = (internship: Internship) => {
     if (!user) {
       // User needs to be logged in
       alert('Please sign in to apply for internships');
       return;
     }
     
-    try {
-      // Check if user has already applied
-      const { data: existingApplications, error: checkError } = await supabase
-        .from('applications')
-        .select('id')
-        .eq('position_id', internshipId)
-        .eq('student_id', user.id);
-      
-      if (checkError) throw checkError;
-      
-      if (existingApplications && existingApplications.length > 0) {
-        alert('You have already applied for this position');
-        return;
-      }
-      
-      // Create application
-      const { error: applicationError } = await supabase
-        .from('applications')
-        .insert({
-          position_id: internshipId,
-          student_id: user.id,
-          status: 'pending'
-        });
-      
-      if (applicationError) throw applicationError;
-      
-      alert('Application submitted successfully!');
-    } catch (error: any) {
-      console.error('Error applying for internship:', error);
-      alert('Failed to submit application. Please try again.');
-    }
+    // Set selected position and show modal
+    setSelectedPosition({
+      id: internship.id,
+      title: internship.title,
+      companyName: internship.startup_name
+    });
+    setShowApplicationModal(true);
+  };
+
+  // Close application modal
+  const handleCloseModal = () => {
+    setShowApplicationModal(false);
+    setSelectedPosition(null);
   };
 
   // Apply filters and search
@@ -441,7 +432,7 @@ const InternshipPage: React.FC = () => {
                     </p>
                     
                     <button 
-                      onClick={() => handleApply(internship.id)}
+                      onClick={() => handleApply(internship)}
                       className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors font-medium"
                     >
                       Apply Now
@@ -466,6 +457,17 @@ const InternshipPage: React.FC = () => {
           </button>
         </div>
       ) : null}
+      
+      {/* Application Modal */}
+      {selectedPosition && (
+        <ApplicationModal 
+          isOpen={showApplicationModal}
+          onClose={handleCloseModal}
+          positionId={selectedPosition.id}
+          positionTitle={selectedPosition.title}
+          companyName={selectedPosition.companyName}
+        />
+      )}
     </div>
   );
 };

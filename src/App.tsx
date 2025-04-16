@@ -3,10 +3,13 @@ import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Navbar from './components/Navbar';
 import HomePage from './pages/HomePage';
-import InternshipPage from './pages/InternshipPage';
+import InternshipPage from './pages/UpdatedInternshipPage';
 import StartupRegistrationPage from './pages/StartupRegistrationPage';
 import AuthPage from './pages/AuthPage';
 import StartupDashboard from './pages/StartupDashboard';
+import StudentProfilePage from './pages/StudentProfilePage';
+import ProfileSettings from './pages/ProfileSettings';
+import MyApplicationsPage from './pages/MyApplicationsPage';
 import { Rocket } from 'lucide-react';
 
 interface ProtectedRouteProps {
@@ -81,10 +84,15 @@ const App: React.FC = () => {
               path="/my-applications"
               element={
                 <ProtectedRoute requiredType="student">
-                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <h1 className="text-3xl font-bold">My Applications</h1>
-                    <p className="mt-4">Coming soon</p>
-                  </div>
+                  <MyApplicationsPage />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/profile/student"
+              element={
+                <ProtectedRoute requiredType="student">
+                  <StudentProfilePage />
                 </ProtectedRoute>
               }
             />
@@ -114,10 +122,7 @@ const App: React.FC = () => {
               path="/profile"
               element={
                 <ProtectedRoute>
-                  <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                    <h1 className="text-3xl font-bold">Profile Settings</h1>
-                    <p className="mt-4">Coming soon</p>
-                  </div>
+                  <ProfileSettings />
                 </ProtectedRoute>
               }
             />

@@ -97,9 +97,9 @@ const Navbar: React.FC = () => {
               ))}
             </div>
             
-            {isLoading ? (
-              <div className="w-8 h-8 rounded-full border-2 border-indigo-500 border-t-transparent animate-spin"></div>
-            ) : user ? (
+            {/* IMPORTANT: Completely removed the loading spinner that was causing issues */}
+            
+            {user ? (
               <div className="relative ml-3">
                 <button
                   onClick={() => setIsDropdownOpen(!isDropdownOpen)}
